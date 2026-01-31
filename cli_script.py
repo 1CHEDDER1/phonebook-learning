@@ -14,7 +14,7 @@ def load_data(file_path: Path):
         
         valid_contacts = []
         for entry in data:
-            if isinstance(entry, dict) and 'name' in entry and 'number' in entry:
+            if isinstance(entry, dict) and {'id', 'name', 'number'} <= entry.keys():
                 valid_contacts.append(entry)
         return valid_contacts
 
@@ -36,12 +36,22 @@ def list_contacts(value_contacts: list):
         return
     print(f"{'ID':<4} | {'Имя':<20} | {'Номер':<15}")
     print("-" * 45)
-    for index, contact in enumerate(value_contacts):
-        name = contact['name']
-        number = contact['number']
-        print(f"{index:<4} | {name:<20} | {number:<15}")
+    for contact in value_contacts:
+        print(f"{contact['id']:<4} | {contact['name']:<20} | {contact['number']:<15}")
 
-def add_contact(value_contacts: list, file_path: Path):
+def add_contact_logic(value_contacts: list, file_path: Path, name, number):
+    new_id = max((c["id"] for c in value_contacts), default=0) + 1    
+
+    new_contact = {
+        "id": new_id,
+        "name": name, 
+        "number": number
+    }
+    value_contacts.append(new_contact)
+    save_data(value_contacts, file_path)
+    print("Контакт сохранен.")
+
+def add_contact_ui(value_contacts: list, file_path: Path):
     name = input("Введите Имя: ").strip()
     number = input("Введите Номер: ").strip()
 
@@ -52,15 +62,7 @@ def add_contact(value_contacts: list, file_path: Path):
     if not number or not number.isdigit():
         print("Ошибка: Номер обязателен и должен содержать только цифры!")
         return
-    
-    new_contact = {
-        "name": name, 
-        "number": number
-    }
-
-    value_contacts.append(new_contact)
-    save_data(value_contacts, file_path)
-    print("Контакт сохранен.")
+    add_contact_logic(value_contacts, file_path, name, number)
 
 def find_contacts(value_contacts: list, search_arg=None): 
     if not value_contacts:
@@ -88,62 +90,44 @@ def find_contacts(value_contacts: list, search_arg=None):
 
 def delete_contacts(value_contacts: list, file_path: Path, target_arg=None):
     if target_arg is None:
-        raw_input = input("Введите ID контакта для удаления: ")
+        raw_input = input("Введите index контакта для удаления: ")
     else:
         raw_input = target_arg
     
     try:
-        index = int(raw_input)
-        if index < 0 or index >= len(value_contacts):
-            print("Ошибка: Неверный ID.")
-            return
-        
-        removed = value_contacts.pop(index)
+        target_id = int(raw_input)
+        value_contacts[:] = [c for c in value_contacts if c['id'] != target_id]
+        print("Контакт удален!")
         save_data(value_contacts, file_path)
-        print(f"Контакт '{removed['name']}' удален.")
 
     except ValueError:
-        print("Ошибка: ID должен быть числом!")
+        print("Ошибка: index должен быть числом!")
 
 def update_contacts(value_contacts: list, file_path: Path, update_arg=None):
-    if update_arg is None:
-        upd_input = input("Введите ID контакта для изменения: ")
-    else:
-        upd_input = update_arg
-    
+
     try:
-        index = int(upd_input)
-        if index < 0 or index >= len(value_contacts):
-            print("Ошибка: Неверный ID.")
+        uid = int(update_arg) if update_arg else int(input("ID для изменения: "))
+        target_contact = next((c for c in value_contacts if c["id"] == uid), None)
+
+        if not target_contact:
+            print("Ошибка: ID не найден.")
             return
         
-        contact = value_contacts[index]
-        print(f"Редактируем: {contact['name']} | {contact['number']}")
-
-        new_name = input("Новое имя (Enter чтобы оставить): ").strip()
-        new_number = input("Новый номер (Enter чтобы оставить): ").strip()
+        print(f"Редактируем: {target_contact['name']} | {target_contact['number']}")
+        new_name = input(f"Новое имя [{target_contact['name']}]: ").strip()
+        new_number = input(f"Новый номер [{target_contact['number']}]: ").strip()
         
-        changed = False
-
-        if new_name:
-            contact['name'] = new_name
-            changed = True
-        
-        if new_number:
-            if not new_number.isdigit():
+        if new_number and not new_number.isdigit():
                 print("Ошибка: Номер должен содержать только цифры! Изменение отменено.")
                 return
-            contact['number'] = new_number
-            changed = True
         
-        if changed:
-            save_data(value_contacts, file_path)
-            print("Контакт успешно обновлен.")
-        else:
-            print("Изменений нет.")
+        target_contact['name'] = new_name or target_contact['name']
+        target_contact['number'] = new_number or target_contact['number']
+        save_data(value_contacts, file_path)
+        print("Контакт успешно обновлен.")
 
     except ValueError:
-        print("Ошибка: ID должен быть числом!")
+        print("Ошибка: index должен быть числом!")
 
 def main(value_contacts: list, file_path: Path):
     print("\n=== ТЕЛЕФОННАЯ КНИГА ===")
@@ -151,8 +135,8 @@ def main(value_contacts: list, file_path: Path):
           "  add           - добавить контакт\n"
           "  list          - список всех\n"
           "  find <text>   - поиск\n"
-          "  delete <id>   - удалить по ID\n"
-          "  update <id>   - изменить по ID\n"
+          "  delete <index>   - удалить по index\n"
+          "  update <index>   - изменить по index\n"
           "  exit          - выход")
     print("===============================\n")
 
@@ -169,21 +153,14 @@ def main(value_contacts: list, file_path: Path):
         command = user_input[0].lower()
         args = user_input[1] if len(user_input) > 1 else None
 
-        if command == "add":
-            add_contact(value_contacts, file_path)
-        elif command == "list":
-            list_contacts(value_contacts)
-        elif command == "find":
-            find_contacts(value_contacts, args)
-        elif command == "delete":
-            delete_contacts(value_contacts, file_path, args)
-        elif command == "update":
-            update_contacts(value_contacts, file_path, args)
-        elif command == "exit":
-            print("Пока!")
-            break
-        else:
-            print("Неизвестная команда.")
+        match command:
+            case "add":    add_contact_ui(value_contacts, file_path)
+            case "list":   list_contacts(value_contacts)
+            case "find":   find_contacts(value_contacts, args)
+            case "delete": delete_contacts(value_contacts, file_path, args)
+            case "update": update_contacts(value_contacts, file_path, args)
+            case "exit":   break
+            case _:        print("Неизвестная команда.")
 
 if __name__ == "__main__":
     initial_contacts = load_data(file_path)
